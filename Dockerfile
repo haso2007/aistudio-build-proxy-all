@@ -19,15 +19,19 @@ FROM python:3.10-slim
 # 设置工作目录
 WORKDIR /app
 
+# ------------------------- 关键修正区域 START -------------------------
 # 安装系统依赖
-# supervisor: 进程管理
-# xvfb: 用于 Camoufox 的 'virtual' 无头模式
-# git: Camoufox 可能需要的依赖
+# ADDED: build-essential (编译器), libxml2-dev/libxslt-dev (为 lxml), libmaxminddb-dev (为 geoip)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     xvfb \
     git \
+    build-essential \
+    libxml2-dev \
+    libxslt-dev \
+    libmaxminddb-dev \
     && rm -rf /var/lib/apt/lists/*
+# ------------------------- 关键修正区域 END ---------------------------
 
 # 复制 supervisor 配置文件
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -43,7 +47,6 @@ RUN camoufox fetch
 COPY --from=builder-go /build/go_app_binary /app/go_app_binary
 
 # 复制 Python 应用源代码
-# 注意：我们不复制 config.yaml 和 cookies 文件夹
 COPY camoufox-py/browser /app/browser
 COPY camoufox-py/utils /app/utils
 COPY camoufox-py/run_camoufox.py /app/run_camoufox.py
