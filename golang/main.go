@@ -519,6 +519,10 @@ func authenticateHTTPRequest(r *http.Request) (string, error) {
 // --- 主函数 ---
 
 func main() {
+	    http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte("OK"))
+    })
 	// WebSocket 路由
 	http.HandleFunc(wsPath, handleWebSocket)
 
