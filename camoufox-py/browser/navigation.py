@@ -47,7 +47,7 @@ def handle_successful_navigation(page: Page, logger, cookie_file_config):
     logger.info("实例将保持运行状态。每10秒点击一次页面以保持活动。")
     while True:
         try:
-            page.click('body')
+            page.click('body', force=True) 
             time.sleep(10)
         except Exception as e:
             logger.error(f"在保持活动循环中出错: {e}")
