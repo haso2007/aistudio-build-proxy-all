@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -294,15 +295,101 @@ func handleProxyRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// --- 模型别名处理：支持 \"-search\" 后缀开启 Google Search 工具 ---
+	// 仅当路径形如 /v1beta/models/<model>:<op> 且 <model> 以 -search 结尾时生效
+	enableSearchTool := false
+	newPath := r.URL.Path
+	if idx := strings.Index(newPath, "/models/"); idx != -1 {
+		rest := newPath[idx+len("/models/"):]
+		if cIdx := strings.Index(rest, ":"); cIdx != -1 {
+			modelName := rest[:cIdx]
+			if strings.HasSuffix(modelName, "-search") {
+				enableSearchTool = true
+				baseModel := strings.TrimSuffix(modelName, "-search")
+				rest = baseModel + rest[cIdx:]
+				newPath = newPath[:idx+len("/models/")] + rest
+			}
+		}
+	}
+
+	// 如果需要，为请求体注入 Google Search 工具配置
+	updatedBody := bodyBytes
+	if enableSearchTool && len(bodyBytes) > 0 {
+		var bodyJSON map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &bodyJSON); err == nil {
+			// 是否注入 tools 数组由环境变量控制（默认不注入，更贴近网页行为）
+			injectTools := false
+			if v := os.Getenv("SEARCH_INJECTION_WITH_TOOLS"); strings.EqualFold(v, "1") || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") {
+				injectTools = true
+			}
+			if injectTools {
+				// 1) 确保 tools 数组包含 {"google_search":{}}
+				toolsAny, ok := bodyJSON["tools"].([]interface{})
+				if !ok {
+					toolsAny = []interface{}{}
+				}
+				hasGoogleSearch := false
+				for _, t := range toolsAny {
+					if m, ok := t.(map[string]interface{}); ok {
+						if _, ok := m["google_search"]; ok {
+							hasGoogleSearch = true
+							break
+						}
+					}
+				}
+				if !hasGoogleSearch {
+					toolsAny = append(toolsAny, map[string]interface{}{"google_search": map[string]interface{}{}})
+				}
+				bodyJSON["tools"] = toolsAny
+			}
+
+			// 2) 设置 toolConfig.googleSearchRetrieval.dynamicRetrievalConfig.mode = "MODE_DYNAMIC"
+			tc, _ := bodyJSON["toolConfig"].(map[string]interface{})
+			if tc == nil {
+				tc = make(map[string]interface{})
+			}
+			gsr, _ := tc["googleSearchRetrieval"].(map[string]interface{})
+			if gsr == nil {
+				gsr = make(map[string]interface{})
+			}
+			drc, _ := gsr["dynamicRetrievalConfig"].(map[string]interface{})
+			if drc == nil {
+				drc = make(map[string]interface{})
+			}
+			if _, ok := drc["mode"]; !ok {
+				drc["mode"] = "MODE_DYNAMIC"
+			}
+			gsr["dynamicRetrievalConfig"] = drc
+			tc["googleSearchRetrieval"] = gsr
+			bodyJSON["toolConfig"] = tc
+
+			if marshaled, err := json.Marshal(bodyJSON); err == nil {
+				updatedBody = marshaled
+			}
+		}
+
+		// 体被修改，去掉 Content-Length，让下游自动计算
+		if _, ok := headers["Content-Length"]; ok {
+			delete(headers, "Content-Length")
+		}
+	}
+
+	// 构造转发 URL（如有 -search 后缀会使用改写后的路径）
+	forwardPath := newPath
+	forwardURL := "https://generativelanguage.googleapis.com" + forwardPath
+	if r.URL.RawQuery != "" {
+		forwardURL += "?" + r.URL.RawQuery
+	}
+
 	requestPayload := WSMessage{
 		ID:   reqID,
 		Type: "http_request",
 		Payload: map[string]interface{}{
 			"method": r.Method,
 			// 假设前端知道如何处理这个相对URL，或者您在这里构建完整的外部URL
-			"url":     "https://generativelanguage.googleapis.com" + r.URL.String(),
+			"url":     forwardURL,
 			"headers": headers,
-			"body":    string(bodyBytes), // 对于二进制数据，应使用base64编码
+			"body":    string(updatedBody), // 对于二进制数据，应使用base64编码
 		},
 	}
 

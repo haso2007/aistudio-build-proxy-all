@@ -68,3 +68,24 @@ docker logs [容器名]
 ![running example](/img/running_example.gif)
 
 如果使用推理模型慢,那就是 aistudio 的问题, 和本项目没关系
+
+## 新增功能: 通过模型后缀启用 Google Search
+
+为便于像 AI Studio 网页那样一键启用搜索工具, 现在可以在模型名后添加 `-search` 后缀, 代理会自动：
+
+- 将模型名去掉 `-search` 后再转发到官方接口
+- 默认仅注入 `toolConfig.googleSearchRetrieval.dynamicRetrievalConfig.mode = "MODE_DYNAMIC"`（更贴近网页行为）
+- 如需同时注入 `tools.google_search`，设置环境变量 `SEARCH_INJECTION_WITH_TOOLS=true`
+
+示例调用：
+
+```
+POST http://127.0.0.1:5345/v1beta/models/gemini-1.5-flash-search:generateContent?key=your_set_api_key_here
+Content-Type: application/json
+
+{
+  "contents": [ { "role": "user", "parts": [ { "text": "今天的要闻是什么？" } ] } ]
+}
+```
+
+你也可以使用 `gemini-2.5-pro-search` 等别名。若你已在请求体手动配置了 `tools` 或 `toolConfig`，代理不会覆盖已存在的同名字段，仅在缺失时补充。

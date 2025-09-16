@@ -20,6 +20,7 @@ def run_browser_instance(config):
     expected_url = config.get('url')
     proxy = config.get('proxy')
     headless_setting = config.get('headless', 'virtual')
+    force_enable_search = bool(config.get('force_enable_search', True))
 
     if not cookie_file or not expected_url or not os.path.exists(cookie_file):
         logger.error(f"错误: 无效的配置或 Cookie 文件未找到 for {cookie_file}")
@@ -182,7 +183,7 @@ def run_browser_instance(config):
 
                 # --- If all checks pass, we assume success ---
                 logger.info("所有验证通过，确认已成功登录。")
-                handle_successful_navigation(page, logger, cookie_file_config)
+                handle_successful_navigation(page, logger, cookie_file_config, force_enable_search=force_enable_search)
             elif "accounts.google.com/v3/signin/accountchooser" in final_url:
                 logger.warning("检测到Google账户选择页面。登录失败或Cookie已过期。")
                 page.screenshot(path=os.path.join(screenshot_dir, f"FAIL_chooser_click_failed_{cookie_file_config}.png"))

@@ -2,6 +2,8 @@
 global_settings:
   # 无头模式: true (标准无头), false (有头), or 'virtual' (虚拟显示, Linux使用)
   headless: virtual
+  # 是否强制在页面层面开启 "Grounding with Google Search"，默认开启
+  force_enable_search: true
   
   # 全局代理 (可选)。如果大多数实例都使用同一个代理，请在这里设置。
   # 格式: "http://user:pass@host:port"

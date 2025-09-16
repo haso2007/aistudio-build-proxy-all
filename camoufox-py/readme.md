@@ -83,7 +83,17 @@ instances:
     # 此处未指定 headless 或 proxy，因此它将使用 global_settings 中的值
 ```
 
-### 3. 运行脚本
+### 3. 可选：控制是否强制开启搜索
+
+在 `config.yaml` 的 `global_settings` 中新增：
+
+```yaml
+global_settings:
+  headless: virtual
+  force_enable_search: true  # 默认 true；设为 false 则不强制在页面打开 "Grounding with Google Search"
+```
+
+### 4. 运行脚本
 
 现在，运行脚本非常简单，只需提供配置文件的路径即可。
 
@@ -93,6 +103,6 @@ python3 run_camoufox.py config.yaml
 
 脚本将会读取 `config.yaml`，并根据您的配置启动所有定义的浏览器实例。
 
-### 4. 停止脚本
+### 5. 停止脚本
 
 脚本会一直运行，直到您手动停止它。在运行脚本的终端中按 `Ctrl+C`，主程序会捕获到信号并终止所有正在运行的浏览器子进程。
