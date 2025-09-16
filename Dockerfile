@@ -12,7 +12,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags "-w -s" -o go_app_binary main.
 FROM python:3.11-bullseye
 WORKDIR /app
 # 【最终修正】: 补充浏览器运行时所需的系统图形和音频库
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 加入多镜像重试以适配网络受限环境（可通过 --build-arg APT_PRIMARY=mirrors.aliyun.com 覆盖）
+ARG APT_PRIMARY=deb.debian.org
+ARG APT_FALLBACKS="mirrors.aliyun.com mirrors.tuna.tsinghua.edu.cn mirrors.ustc.edu.cn"
+RUN set -eux; \
+    for mirror in $APT_PRIMARY $APT_FALLBACKS; do \
+        sed -i "s|deb.debian.org|$mirror|g" /etc/apt/sources.list || true; \
+        sed -i "s|security.debian.org|$mirror|g" /etc/apt/sources.list || true; \
+        if apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update; then \
+            echo "Using APT mirror: $mirror"; \
+            break; \
+        else \
+            echo "APT update failed with mirror $mirror, trying next..."; \
+        fi; \
+    done; \
+    apt-get install -y --no-install-recommends \
     # 编译工具
     build-essential \
     libxml2-dev \
