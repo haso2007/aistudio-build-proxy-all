@@ -33,14 +33,29 @@ def handle_successful_navigation(page: Page, logger, cookie_file_config, force_e
     # 检查并处理 "Last modified by..." 的弹窗
     handle_untrusted_dialog(page, logger=logger)
 
+    # 处理首次进入时的引导弹窗（例如 "It's time to build"）
+    try:
+        dismissed = dismiss_onboarding_modal(page, logger=logger)
+        if dismissed:
+            logger.info("已关闭首屏引导弹窗（It's time to build 等）。")
+    except Exception as e:
+        logger.info(f"处理首屏引导弹窗时出现异常：{e}")
+
     # 尝试开启 Grounding with Google Search（按配置开关）
     if force_enable_search:
         try:
+            # 先尝试打开设置面板
+            open_settings_panel(page, logger=logger)
             enabled = enable_grounding_with_google_search(page, logger=logger)
             if enabled:
                 logger.info("已确保开启 Grounding with Google Search。")
             else:
                 logger.warning("未能确认开启 Grounding with Google Search（可能UI结构不同或权限受限）。")
+                # 失败时留证据
+                try:
+                    page.screenshot(path=os.path.join('logs', f"WARN_search_toggle_not_confirmed_{cookie_file_config}.png"), full_page=True)
+                except Exception:
+                    pass
         except Exception as e:
             logger.warning(f"尝试开启 Grounding with Google Search 时发生异常: {e}")
 
@@ -100,6 +115,9 @@ def enable_grounding_with_google_search(page: Page, logger=None) -> bool:
         re.compile(r"Google\s*Search", re.I),
         re.compile(r"Google\s*搜索", re.I),
         re.compile(r"谷歌\s*搜索", re.I),
+        re.compile(r"联网\s*搜索", re.I),
+        re.compile(r"检索", re.I),
+        re.compile(r"Grounding", re.I),
     ]
 
     for pat in name_patterns:
@@ -116,7 +134,15 @@ def enable_grounding_with_google_search(page: Page, logger=None) -> bool:
 
     # 3) 回退：根据文本定位附近的 switch/mat-slide-toggle
     text_anchor = None
-    for pat in [re.compile(r"Grounding with Google Search", re.I), re.compile(r"Google\s*Search", re.I)]:
+    for pat in [
+        re.compile(r"Grounding with Google Search", re.I),
+        re.compile(r"Google\s*Search", re.I),
+        re.compile(r"Google\s*搜索", re.I),
+        re.compile(r"谷歌\s*搜索", re.I),
+        re.compile(r"联网\s*搜索", re.I),
+        re.compile(r"检索", re.I),
+        re.compile(r"Grounding", re.I),
+    ]:
         loc = page.get_by_text(pat, exact=False)
         if loc.count() > 0:
             text_anchor = loc.first
@@ -127,17 +153,134 @@ def enable_grounding_with_google_search(page: Page, logger=None) -> bool:
             text_anchor.scroll_into_view_if_needed()
         except Exception:
             pass
-        # 最邻近的角色为 switch 的按钮
-        candidate = text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or @role='group' or @role='region'][1]//button[@role='switch']")
-        if candidate.count() == 0:
-            candidate = text_anchor.locator("xpath=following::button[@role='switch'][1]")
-        if candidate.count() > 0:
-            state = (candidate.first.get_attribute("aria-checked") or "").lower()
-            if state != "true":
-                _log("通过文本定位到开关，尝试打开……")
-                candidate.first.click()
+        # 尝试多个候选：switch按钮、复选框、mat-slide-toggle容器或其label
+        candidates = [
+            text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or @role='group' or @role='region'][1]//button[@role='switch']"),
+            text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or @role='group' or @role='region'][1]//input[@type='checkbox']"),
+            text_anchor.locator("xpath=ancestor::mat-slide-toggle[1]")
+        ]
+        for cand in candidates:
+            if cand.count() > 0:
+                try:
+                    state = (cand.first.get_attribute("aria-checked") or "").lower()
+                except Exception:
+                    state = ""
+                _log("通过文本定位到候选开关，尝试打开……")
+                try:
+                    cand.first.click()
+                except Exception:
+                    try:
+                        cand.first.locator("label").first.click()
+                    except Exception:
+                        pass
                 page.wait_for_timeout(300)
-            state2 = (candidate.first.get_attribute("aria-checked") or "").lower()
-            return state2 == "true"
+                # 再确认一次
+                try:
+                    state2 = (cand.first.get_attribute("aria-checked") or "").lower()
+                    if state2 == "true":
+                        return True
+                except Exception:
+                    # 某些实现没有 aria-checked，可通过再次查找 role=switch 校验
+                    sw = page.get_by_role("switch", name=re.compile(r"Google|搜索|Grounding", re.I))
+                    if sw.count() > 0 and (sw.first.get_attribute("aria-checked") or "").lower() == "true":
+                        return True
+
+    return False
+
+
+def open_settings_panel(page: Page, logger=None) -> bool:
+    """尝试打开设置面板（齿轮按钮或名为 Settings/设置 的按钮）。"""
+    def _log(msg: str):
+        if logger:
+            logger.info(msg)
+
+    # 1) aria-label 方式
+    for sel in [
+        "button[aria-label='Settings']",
+        "button[aria-label*='Settings' i]",
+        "button[aria-label='设置']",
+        "button[aria-label*='设置']",
+    ]:
+        btn = page.locator(sel)
+        if btn.count() > 0:
+            try:
+                _log(f"尝试点击设置按钮: {sel}")
+                btn.first.click()
+                page.wait_for_timeout(300)
+                return True
+            except Exception:
+                pass
+
+    # 2) role 名称方式
+    for pat in [re.compile(r"^Settings$", re.I), re.compile(r"^设置$", re.I)]:
+        btn = page.get_by_role("button", name=pat)
+        if btn.count() > 0:
+            try:
+                _log("尝试点击设置按钮（role=button）")
+                btn.first.click()
+                page.wait_for_timeout(300)
+                return True
+            except Exception:
+                pass
+
+    return False
+
+
+def dismiss_onboarding_modal(page: Page, logger=None) -> bool:
+    """关闭 AI Studio 首屏引导弹窗（如 "It's time to build"）。"""
+    def _log(msg: str):
+        if logger:
+            logger.info(msg)
+
+    # 1) 直接寻找包含特征文案的对话框
+    try:
+        modal_texts = [
+            re.compile(r"It's time to build", re.I),
+            re.compile(r"Use Google AI Studio", re.I),
+            re.compile(r"Try Gemini", re.I),
+            re.compile(r"Get API key", re.I),
+        ]
+        for pat in modal_texts:
+            box = page.get_by_text(pat, exact=False)
+            if box.count() > 0 and box.first.is_visible():
+                _log("检测到首屏引导弹窗内容，尝试关闭……")
+                # 优先点击关闭按钮
+                for sel in [
+                    "button[aria-label='Close']",
+                    "button[aria-label*='Close' i]",
+                    "button[aria-label='关闭']",
+                ]:
+                    btn = page.locator(sel)
+                    if btn.count() > 0 and btn.first.is_visible():
+                        try:
+                            btn.first.click()
+                            page.wait_for_timeout(300)
+                            return True
+                        except Exception:
+                            pass
+
+                # 回退：role 名称方式
+                for patBtn in [re.compile(r"^Close$", re.I), re.compile(r"^关闭$", re.I), re.compile(r"^Dismiss$", re.I), re.compile(r"^×$")]:
+                    btn = page.get_by_role("button", name=patBtn)
+                    if btn.count() > 0 and btn.first.is_visible():
+                        try:
+                            btn.first.click()
+                            page.wait_for_timeout(300)
+                            return True
+                        except Exception:
+                            pass
+
+                # 再退：按 ESC
+                try:
+                    page.keyboard.press('Escape')
+                    page.wait_for_timeout(200)
+                except Exception:
+                    pass
+
+                # 再检查是否仍存在
+                if box.count() == 0 or not box.first.is_visible():
+                    return True
+    except Exception:
+        pass
 
     return False
