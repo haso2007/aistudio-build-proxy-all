@@ -69,11 +69,12 @@ global_settings:
 instances:
   # 实例 1: 使用全局设置
   - cookie_file: "user1_cookie.json"
-    url: "https://aistudio.google.com/apps/drive/your_project_id_1"
+    # 直接进入 Chat 页面，更容易在右侧 Run settings 打开 Google Search
+    url: "https://aistudio.google.com/prompts/new_chat"
 
   # 实例 2: 覆盖全局设置，使用自己的代理并以有头模式运行
   - cookie_file: "user2_cookie.json"
-    url: "https://aistudio.google.com/apps/drive/your_project_id_2"
+    url: "https://aistudio.google.com/prompts/new_chat"
     headless: false # 覆盖全局设置，此实例将显示浏览器窗口
     proxy: "http://user:pass@specific-proxy.com:9999" # 使用特定代理
 
