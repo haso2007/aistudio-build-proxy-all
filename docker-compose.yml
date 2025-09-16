@@ -6,6 +6,10 @@ services:
     environment:
       # 设置一个你最终Gemini服务的API密钥
       - AUTH_API_KEY=your_set_api_key_here
+      # 始终开启搜索（可设为 false/0 关闭）
+      - ALWAYS_ENABLE_SEARCH=true
+      # 默认也注入 tools.google_search（设为 false 关闭）
+      - SEARCH_INJECTION_WITH_TOOLS=true
     volumes:
       - ./camoufox-py/config.yaml:/app/config.yaml
       - ./camoufox-py/cookies:/app/cookies

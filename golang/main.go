@@ -295,9 +295,17 @@ func handleProxyRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// --- 模型别名处理：支持 \"-search\" 后缀开启 Google Search 工具 ---
-	// 仅当路径形如 /v1beta/models/<model>:<op> 且 <model> 以 -search 结尾时生效
-	enableSearchTool := false
+	// --- 搜索注入策略 ---
+	// 优先受环境变量 ALWAYS_ENABLE_SEARCH 控制（默认 true），否则仅在模型名带 -search 后缀时开启
+	alwaysEnable := true
+	if v := os.Getenv("ALWAYS_ENABLE_SEARCH"); v != "" {
+		if strings.EqualFold(v, "0") || strings.EqualFold(v, "false") || strings.EqualFold(v, "no") {
+			alwaysEnable = false
+		}
+	}
+
+	// 模型别名处理：支持 "-search" 后缀
+	enableSearchTool := alwaysEnable
 	newPath := r.URL.Path
 	if idx := strings.Index(newPath, "/models/"); idx != -1 {
 		rest := newPath[idx+len("/models/"):]
@@ -317,9 +325,9 @@ func handleProxyRequest(w http.ResponseWriter, r *http.Request) {
 	if enableSearchTool && len(bodyBytes) > 0 {
 		var bodyJSON map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &bodyJSON); err == nil {
-			// 是否注入 tools 数组由环境变量控制（默认不注入，更贴近网页行为）
+			// 是否注入 tools 数组由环境变量控制（默认注入以确保启用搜索）
 			injectTools := false
-			if v := os.Getenv("SEARCH_INJECTION_WITH_TOOLS"); strings.EqualFold(v, "1") || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") {
+			if v := os.Getenv("SEARCH_INJECTION_WITH_TOOLS"); v == "" || strings.EqualFold(v, "1") || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") {
 				injectTools = true
 			}
 			if injectTools {

@@ -69,13 +69,13 @@ docker logs [容器名]
 
 如果使用推理模型慢,那就是 aistudio 的问题, 和本项目没关系
 
-## 新增功能: 通过模型后缀启用 Google Search
+## 新增功能: 默认启用 Google Search
 
-为便于像 AI Studio 网页那样一键启用搜索工具, 现在可以在模型名后添加 `-search` 后缀, 代理会自动：
+为保证在非 Chat 视图也能具备搜索能力，代理默认在转发时注入搜索配置：
 
-- 将模型名去掉 `-search` 后再转发到官方接口
-- 默认仅注入 `toolConfig.googleSearchRetrieval.dynamicRetrievalConfig.mode = "MODE_DYNAMIC"`（更贴近网页行为）
-- 如需同时注入 `tools.google_search`，设置环境变量 `SEARCH_INJECTION_WITH_TOOLS=true`
+- ALWAYS_ENABLE_SEARCH（默认 true）：始终启用搜索；设为 false/0 可关闭
+- SEARCH_INJECTION_WITH_TOOLS（默认 true）：同时注入 `tools.google_search`；设为 false 可只注入 `toolConfig`
+- 仍兼容 `*-search` 模型别名（会去掉后缀再转发）
 
 示例调用：
 
