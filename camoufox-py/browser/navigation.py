@@ -1,6 +1,7 @@
 import time
 import os
 import re
+from typing import Optional
 from playwright.sync_api import Page, expect
 
 def handle_untrusted_dialog(page: Page, logger=None):
@@ -23,7 +24,7 @@ def handle_untrusted_dialog(page: Page, logger=None):
     except Exception as e:
         logger.info(f"检查弹窗时发生意外：{e}，将继续执行...")
 
-def handle_successful_navigation(page: Page, logger, cookie_file_config, force_enable_search: bool = True):
+def handle_successful_navigation(page: Page, logger, cookie_file_config, force_enable_search: bool = True, app_name: Optional[str] = None):
     """
     在成功导航到目标页面后，执行后续操作（处理弹窗、截图、保持运行）。
     """
@@ -40,6 +41,14 @@ def handle_successful_navigation(page: Page, logger, cookie_file_config, force_e
             logger.info("已关闭首屏引导弹窗（It's time to build 等）。")
     except Exception as e:
         logger.info(f"处理首屏引导弹窗时出现异常：{e}")
+
+    # 若停在首页，尝试进入指定 App
+    try:
+        entered = enter_build_app_if_on_home(page, app_name=app_name, logger=logger)
+        if entered:
+            logger.info("已从首页进入目标 App 页面。")
+    except Exception as e:
+        logger.info(f"尝试从首页进入 App 时发生异常：{e}")
 
     # 尝试开启 Grounding with Google Search（按配置开关）
     if force_enable_search:
@@ -280,6 +289,53 @@ def dismiss_onboarding_modal(page: Page, logger=None) -> bool:
                 # 再检查是否仍存在
                 if box.count() == 0 or not box.first.is_visible():
                     return True
+    except Exception:
+        pass
+
+    return False
+
+
+def enter_build_app_if_on_home(page: Page, app_name: Optional[str] = None, logger=None) -> bool:
+    """
+    若当前处于 AI Studio 首页（"Build apps with Gemini" 搜索框/展示区），尝试进入指定 App：
+    - 优先点击右上角 "Your apps" 并选择第一项或匹配名称的卡片
+    - 若提供了 app_name，则按名称模糊匹配；否则进入第一张 App 卡片
+    """
+    def _log(msg: str):
+        if logger:
+            logger.info(msg)
+
+    try:
+        # 通过页面关键词判断是否在首页
+        if page.get_by_text(re.compile(r"Build apps with Gemini", re.I)).count() == 0:
+            return False
+    except Exception:
+        # 关键词不存在说明可能已经在 App 内
+        return False
+
+    # 打开 Your apps
+    try:
+        your_apps_btn = page.get_by_text(re.compile(r"^Your apps$", re.I))
+        if your_apps_btn.count() > 0:
+            your_apps_btn.first.click()
+            page.wait_for_timeout(500)
+    except Exception:
+        pass
+
+    # 选择 App 卡片
+    candidate = None
+    try:
+        if app_name:
+            candidate = page.get_by_text(re.compile(re.escape(app_name), re.I), exact=False)
+        if (not candidate) or candidate.count() == 0:
+            # 选择第一张可见卡片（避免 FAQ、模板等）
+            cards = page.locator("xpath=(//div[contains(@class,'mat-card') or contains(@class,'card')])[1]")
+            if cards.count() > 0:
+                candidate = cards.first
+        if candidate and candidate.count() > 0:
+            candidate.click()
+            page.wait_for_timeout(800)
+            return True
     except Exception:
         pass
 
