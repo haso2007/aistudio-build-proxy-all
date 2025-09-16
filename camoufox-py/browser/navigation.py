@@ -126,6 +126,28 @@ def enable_grounding_with_google_search(page: Page, logger=None) -> bool:
     except Exception:
         pass
 
+    # 1.1) 回退：通过文本锚点展开 Tools
+    try:
+        tools_text = page.get_by_text(re.compile(r"^Tools$", re.I))
+        if tools_text.count() == 0:
+            tools_text = page.get_by_text(re.compile(r"^工具$", re.I))
+        if tools_text.count() > 0:
+            hdr = tools_text.first.locator("xpath=ancestor::*[self::mat-expansion-panel or self::section or self::div][1]//*[self::mat-expansion-panel-header or @role='button' or self::button][1]")
+            if hdr.count() > 0:
+                aria_expanded = (hdr.first.get_attribute("aria-expanded") or "").lower()
+                if aria_expanded == "false" or aria_expanded == "0":
+                    _log("通过文本锚点展开 Tools 面板……")
+                    try:
+                        hdr.first.click()
+                    except Exception:
+                        try:
+                            hdr.first.locator("button").first.click()
+                        except Exception:
+                            pass
+                    page.wait_for_timeout(300)
+    except Exception:
+        pass
+
     # 2) 优先直接用 role=switch 名称定位
     name_patterns = [
         re.compile(r"Grounding with Google Search", re.I),
@@ -172,9 +194,9 @@ def enable_grounding_with_google_search(page: Page, logger=None) -> bool:
             pass
         # 尝试多个候选：switch按钮、复选框、mat-slide-toggle容器或其label
         candidates = [
-            text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or @role='group' or @role='region'][1]//button[@role='switch']"),
-            text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or @role='group' or @role='region'][1]//input[@type='checkbox']"),
-            text_anchor.locator("xpath=ancestor::mat-slide-toggle[1]")
+            text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or @role='group' or @role='region' or self::section or self::div][1]//button[@role='switch']"),
+            text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or @role='group' or @role='region' or self::section or self::div][1]//input[@type='checkbox']"),
+            text_anchor.locator("xpath=ancestor::*[self::mat-slide-toggle or self::section or self::div][1]//mat-slide-toggle"),
         ]
         for cand in candidates:
             if cand.count() > 0:
