@@ -50,6 +50,14 @@ def handle_successful_navigation(page: Page, logger, cookie_file_config, force_e
     except Exception as e:
         logger.info(f"尝试从首页进入 App 时发生异常：{e}")
 
+    # 确保切换到左侧 Chat 页（而非 Build）
+    try:
+        switched = ensure_chat_view(page, logger=logger)
+        if switched:
+            logger.info("已切换到 Chat 视图。")
+    except Exception as e:
+        logger.info(f"尝试切换到 Chat 视图时发生异常：{e}")
+
     # 尝试开启 Grounding with Google Search（按配置开关）
     if force_enable_search:
         try:
@@ -338,5 +346,52 @@ def enter_build_app_if_on_home(page: Page, app_name: Optional[str] = None, logge
             return True
     except Exception:
         pass
+
+    return False
+
+
+def ensure_chat_view(page: Page, logger=None) -> bool:
+    """左侧导航切换到 Chat/聊天 视图。"""
+    def _log(msg: str):
+        if logger:
+            logger.info(msg)
+
+    # 如果已经在 Chat 视图（页面中存在输入框提示或右侧 Run settings），直接返回
+    try:
+        if page.get_by_text(re.compile(r"Google AI Studio", re.I)).count() > 0:
+            # 仍可能是首页，继续尝试切换
+            pass
+    except Exception:
+        pass
+
+    # 尝试点击左侧导航中的 Chat/聊天
+    for pat in [re.compile(r"^Chat$", re.I), re.compile(r"^聊天$", re.I)]:
+        try:
+            nav = page.get_by_role("link", name=pat)
+            if nav.count() == 0:
+                nav = page.get_by_role("button", name=pat)
+            if nav.count() > 0:
+                _log("点击左侧导航切换到 Chat…")
+                nav.first.click()
+                page.wait_for_timeout(500)
+                return True
+        except Exception:
+            continue
+
+    # 回退：通过图标 aria-label
+    for sel in [
+        "a[aria-label='Chat']",
+        "button[aria-label='Chat']",
+        "a[aria-label='聊天']",
+        "button[aria-label='聊天']",
+    ]:
+        try:
+            el = page.locator(sel)
+            if el.count() > 0:
+                el.first.click()
+                page.wait_for_timeout(500)
+                return True
+        except Exception:
+            pass
 
     return False
