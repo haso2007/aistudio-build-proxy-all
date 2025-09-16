@@ -47,6 +47,8 @@ def run_browser_instance(config):
     if proxy:
         logger.info(f"使用代理: {proxy} 访问")
         launch_options["proxy"] = {"server": proxy, "bypass": "localhost, 127.0.0.1"}
+        # 使用代理时，Camoufox 官方建议开启 geoip 以提升指纹一致性并消除告警
+        launch_options["geoip"] = True
     # 无需禁用图片加载, 因为图片很少, 禁用还可能导致风控增加
     # launch_options["block_images"] = True
     

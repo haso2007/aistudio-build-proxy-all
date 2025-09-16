@@ -83,6 +83,8 @@ instances:
     # 此处未指定 headless 或 proxy，因此它将使用 global_settings 中的值
 ```
 
+提示：在使用代理时，本项目会自动为 Camoufox 开启 `geoip=True` 以符合官方建议并消除告警。
+
 ### 3. 可选：控制是否强制开启搜索
 
 在 `config.yaml` 的 `global_settings` 中新增：
